@@ -2,17 +2,13 @@
 FROM php:8.2-fpm-alpine AS builder
 
 # Installer les dépendances système
-# D'ABORD copier les fichiers de configuration
-COPY docker/nginx.conf /etc/nginx/nginx.conf
-COPY docker/site.conf /etc/nginx/conf.d/default.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# PUIS installer les dépendances
 RUN apk update && apk add --no-cache \
-    nginx \
-    supervisor \
+    git \
+    unzip \
+    curl \
     libpng-dev \
     libzip-dev \
+    zip \
     oniguruma-dev \
     postgresql-dev \
     && docker-php-ext-install \
@@ -54,8 +50,12 @@ RUN apk update && apk add --no-cache \
     zip \
     mbstring
 
+# D'ABORD copier les fichiers de configuration
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/site.conf /etc/nginx/conf.d/default.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copier l'application builder
+# PUIS copier l'application builder
 COPY --from=builder /var/www/html /var/www/html
 
 # Configurer les permissions
