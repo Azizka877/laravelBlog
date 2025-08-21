@@ -50,7 +50,10 @@ RUN apk update && apk add --no-cache \
     zip \
     mbstring
 
-# Créer les fichiers de configuration directement
+# Créer les dossiers de configuration manquants
+RUN mkdir -p /etc/nginx/conf.d /etc/supervisor/conf.d
+
+# Créer les fichiers de configuration
 RUN echo 'events {}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    \n    log_format main '\''$remote_addr - $remote_user [$time_local] "$request" '\''\n                   '\''$status $body_bytes_sent "$http_referer" '\''\n                   '\''"$http_user_agent" "$http_x_forwarded_for"'\'';\n    \n    access_log /var/log/nginx/access.log main;\n    error_log /var/log/nginx/error.log warn;\n    \n    sendfile on;\n    keepalive_timeout 65;\n    \n    include /etc/nginx/conf.d/*.conf;\n}' > /etc/nginx/nginx.conf
 
 RUN echo 'server {\n    listen 8000;\n    server_name _;\n    root /var/www/html/public;\n    index index.php index.html;\n\n    location / {\n        try_files $uri $uri/ /index.php?$query_string;\n    }\n\n    location ~ \.php$ {\n        fastcgi_pass 127.0.0.1:9000;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n\n    location ~ /\.ht {\n        deny all;\n    }\n\n    error_log /var/log/nginx/error.log;\n    access_log /var/log/nginx/access.log;\n}' > /etc/nginx/conf.d/default.conf
