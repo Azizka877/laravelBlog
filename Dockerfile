@@ -37,7 +37,6 @@ FROM php:8.2-fpm-alpine
 # Installer les dépendances système
 RUN apk update && apk add --no-cache \
     nginx \
-    supervisor \
     libpng-dev \
     libzip-dev \
     oniguruma-dev \
@@ -51,14 +50,12 @@ RUN apk update && apk add --no-cache \
     mbstring
 
 # Créer les dossiers de configuration manquants
-RUN mkdir -p /etc/nginx/conf.d /etc/supervisor/conf.d
+RUN mkdir -p /etc/nginx/conf.d
 
-# Créer les fichiers de configuration
+# Créer les fichiers de configuration Nginx
 RUN echo 'events {}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    \n    log_format main '\''$remote_addr - $remote_user [$time_local] "$request" '\''\n                   '\''$status $body_bytes_sent "$http_referer" '\''\n                   '\''"$http_user_agent" "$http_x_forwarded_for"'\'';\n    \n    access_log /var/log/nginx/access.log main;\n    error_log /var/log/nginx/error.log warn;\n    \n    sendfile on;\n    keepalive_timeout 65;\n    \n    include /etc/nginx/conf.d/*.conf;\n}' > /etc/nginx/nginx.conf
 
 RUN echo 'server {\n    listen 8000;\n    server_name _;\n    root /var/www/html/public;\n    index index.php index.html;\n\n    location / {\n        try_files $uri $uri/ /index.php?$query_string;\n    }\n\n    location ~ \.php$ {\n        fastcgi_pass 127.0.0.1:9000;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n\n    location ~ /\.ht {\n        deny all;\n    }\n\n    error_log /var/log/nginx/error.log;\n    access_log /var/log/nginx/access.log;\n}' > /etc/nginx/conf.d/default.conf
-
-RUN echo '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:nginx]\ncommand=nginx -g "daemon off;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/nginx/error.log\nstdout_logfile=/var/log/nginx/access.log\n\n[program:php-fpm]\ncommand=php-fpm\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/php-fpm.log\nstdout_logfile=/var/log/php-fpm.log' > /etc/supervisor/conf.d/supervisord.conf
 
 # Copier l'application builder
 COPY --from=builder /var/www/html /var/www/html
@@ -69,5 +66,5 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 # Exposer le port
 EXPOSE 8000
 
-# Commande de démarrage
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Commande de démarrage simplifiée (sans supervisor)
+CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"]
