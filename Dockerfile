@@ -63,13 +63,13 @@ COPY --from=builder /var/www/html /var/www/html
 # Configurer les permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# EXÉCUTER LES MIGRATIONS ET SEEDERS EN PRODUCTION
-RUN touch database/database.sqlite && \
+RUN if [ ! -f database/database.sqlite ]; then \
+    touch database/database.sqlite && \
     php artisan migrate --force && \
     php artisan db:seed --force && \
     php artisan key:generate --force && \
-    php artisan optimize
-
+    php artisan optimize; \
+fi
 # Exposer le port
 EXPOSE 8000
 
