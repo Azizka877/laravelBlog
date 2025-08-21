@@ -26,6 +26,6 @@ class DemoJob implements ShouldQueue
      */
     public function handle(): void
     {
-     echo $this->property->title;
+    //  echo $this->property->title;
     }
 }

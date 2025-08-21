@@ -17,16 +17,18 @@ class PropertyController extends Controller
 {
     public function index(SearchPropertyRequest $request){
      
+      
        $query =  Property::query()->orderBy('created_at', 'desc');
-       if($price =$request->validated('price')){
-         $query->where('price','<=', $price);
-       }
-       if($surface=$request->validated('surface')){
-         $query->where('surface','>', $surface);
-       }
-       if($rooms=$request->validated('rooms')){
-         $query->where('rooms','>', $rooms);
-       }
+        if ($request->filled('price')) {
+        $query->where('price', '<=', $request->validated('price'));
+    }
+      if ($request->filled('surface')) {
+        $query->where('surface', '>=', $request->validated('surface')); // >= au lieu de >
+    }
+    
+    if ($request->filled('rooms')) {
+        $query->where('rooms', '>=', $request->validated('rooms')); // >= au lieu de >
+    }
        if($title=$request->validated('title')){
         $query->where('title', 'like', '%' . $title. '%');
        }

@@ -2,10 +2,10 @@
 @section('title','Tous nos biens')
 @section('content')
   <div class="bg-light p-5 text-center">
-    <form action="" class="container d-flex gap-2" method="GET">
-       <input type="number" placeholder="Surface minimum" class="form-control" name="surface" value="{{ $input['surface'] ?? ' ' }}">
-       <input type="number" placeholder="Nombre de piece min" class="form-control" name="rooms" value="{{ $input['rooms'] ?? ' ' }}">
-       <input type="number" placeholder="Budget max" class="form-control" name="price" value="{{ $input['price'] ?? ' ' }}">
+    <form action="{{ route('property.index') }}" class="container d-flex gap-2" method="GET">
+       <input type="number" placeholder="Surface minimum" class="form-control" name="surface" value="{{ $input['surface'] ?? '' }}">
+       <input type="number" placeholder="Nombre de piece min" class="form-control" name="rooms" value="{{ $input['rooms'] ?? '' }}">
+       <input type="number" placeholder="Budget max" class="form-control" name="price" value="{{ $input['price'] ?? '' }}">
        <input  placeholder="Mot cles" class="form-control" name="title" value="{{ $input['title'] ?? '' }}">
        <button type="submit" class="btn btn-primary btn-sm flex-grow-0">Rechercher</button>
     </form>
