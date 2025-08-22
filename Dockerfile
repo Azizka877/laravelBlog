@@ -34,72 +34,107 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction \
 # Étape 2 : Image finale
 FROM php:8.2-fpm-alpine
 
-# Installer les dépendances système avec les dépendances de build
+# Installer les dépendances système
 RUN apk update && apk add --no-cache \
     nginx \
     libpng \
     libzip \
     oniguruma \
     postgresql-libs \
-    sqlite
+    sqlite \
+    sqlite-dev
 
-# Installer les dépendances de développement pour compiler les extensions PHP
-RUN apk add --no-cache --virtual .build-deps \
-    libpng-dev \
-    libzip-dev \
-    oniguruma-dev \
-    postgresql-dev \
-    sqlite-dev \
-    && docker-php-ext-install \
+# Installer les extensions PHP
+RUN docker-php-ext-install \
     pdo_mysql \
     pdo_pgsql \
     pdo_sqlite \
     bcmath \
     gd \
     zip \
-    mbstring \
-    && apk del .build-deps
+    mbstring
 
-# Créer les dossiers de configuration manquants
+# Configuration PHP
+RUN echo "error_reporting = E_ALL" >> /usr/local/etc/php/conf.d/errors.ini && \
+    echo "display_errors = On" >> /usr/local/etc/php/conf.d/errors.ini && \
+    echo "log_errors = On" >> /usr/local/etc/php/conf.d/errors.ini
+
+# Configuration Nginx
 RUN mkdir -p /etc/nginx/conf.d
+RUN echo 'events {}' > /etc/nginx/nginx.conf && \
+    echo 'http {' >> /etc/nginx/nginx.conf && \
+    echo '    include /etc/nginx/mime.types;' >> /etc/nginx/nginx.conf && \
+    echo '    default_type application/octet-stream;' >> /etc/nginx/nginx.conf && \
+    echo '    include /etc/nginx/conf.d/*.conf;' >> /etc/nginx/nginx.conf && \
+    echo '}' >> /etc/nginx/nginx.conf
 
-# Créer les fichiers de configuration Nginx avec la bonne syntaxe
-RUN echo -e 'events {}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    \n    log_format main '\''$remote_addr - $remote_user [$time_local] "$request" '\''\n                   '\''$status $body_bytes_sent "$http_referer" '\''\n                   '\''"$http_user_agent" "$http_x_forwarded_for"'\'';\n    \n    access_log /var/log/nginx/access.log main;\n    error_log /var/log/nginx/error.log warn;\n    \n    sendfile on;\n    keepalive_timeout 65;\n    \n    include /etc/nginx/conf.d/*.conf;\n}' > /etc/nginx/nginx.conf
+RUN echo 'server {' > /etc/nginx/conf.d/default.conf && \
+    echo '    listen 8000;' >> /etc/nginx/conf.d/default.conf && \
+    echo '    server_name _;' >> /etc/nginx/conf.d/default.conf && \
+    echo '    root /var/www/html/public;' >> /etc/nginx/conf.d/default.conf && \
+    echo '    index index.php index.html;' >> /etc/nginx/conf.d/default.conf && \
+    echo '' >> /etc/nginx/conf.d/default.conf && \
+    echo '    location / {' >> /etc/nginx/conf.d/default.conf && \
+    echo '        try_files $uri $uri/ /index.php?$query_string;' >> /etc/nginx/conf.d/default.conf && \
+    echo '    }' >> /etc/nginx/conf.d/default.conf && \
+    echo '' >> /etc/nginx/conf.d/default.conf && \
+    echo '    location ~ \.php$ {' >> /etc/nginx/conf.d/default.conf && \
+    echo '        fastcgi_pass 127.0.0.1:9000;' >> /etc/nginx/conf.d/default.conf && \
+    echo '        fastcgi_index index.php;' >> /etc/nginx/conf.d/default.conf && \
+    echo '        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;' >> /etc/nginx/conf.d/default.conf && \
+    echo '        include fastcgi_params;' >> /etc/nginx/conf.d/default.conf && \
+    echo '    }' >> /etc/nginx/conf.d/default.conf && \
+    echo '}' >> /etc/nginx/conf.d/default.conf
 
-RUN echo -e 'server {\n    listen 8000;\n    server_name _;\n    root /var/www/html/public;\n    index index.php index.html;\n\n    location / {\n        try_files $uri $uri/ /index.php?$query_string;\n    }\n\n    location ~ \\.php$ {\n        fastcgi_pass 127.0.0.1:9000;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n\n    location ~ /\\.ht {\n        deny all;\n    }\n\n    error_log /var/log/nginx/error.log;\n    access_log /var/log/nginx/access.log;\n}' > /etc/nginx/conf.d/default.conf
-
-# Copier l'application builder
+# Copier l'application
 COPY --from=builder /var/www/html /var/www/html
 
-# Configurer les permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# Créer le répertoire database et configurer les permissions
+RUN mkdir -p /var/www/html/database && \
+    chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database && \
+    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database
 
-# Créer le répertoire database s'il n'existe pas
-RUN mkdir -p /var/www/html/database
+# Script de démarrage
+RUN echo '#!/bin/sh' > /start.sh && \
+    echo 'set -e' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Créer la base de données SQLite si elle n'\''existe pas' >> /start.sh && \
+    echo 'if [ ! -f /var/www/html/database/database.sqlite ]; then' >> /start.sh && \
+    echo '    echo "Creating SQLite database..."' >> /start.sh && \
+    echo '    touch /var/www/html/database/database.sqlite' >> /start.sh && \
+    echo '    chown www-data:www-data /var/www/html/database/database.sqlite' >> /start.sh && \
+    echo '    chmod 666 /var/www/html/database/database.sqlite' >> /start.sh && \
+    echo 'fi' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Configurer les permissions' >> /start.sh && \
+    echo 'chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database' >> /start.sh && \
+    echo 'chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Générer la clé application si nécessaire' >> /start.sh && \
+    echo 'if ! grep -q "APP_KEY=base64:" /var/www/html/.env; then' >> /start.sh && \
+    echo '    echo "Generating application key..."' >> /start.sh && \
+    echo '    php /var/www/html/artisan key:generate --force' >> /start.sh && \
+    echo 'fi' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Exécuter les migrations' >> /start.sh && \
+    echo 'echo "Running migrations..."' >> /start.sh && \
+    echo 'php /var/www/html/artisan migrate --force' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Exécuter les seeders' >> /start.sh && \
+    echo 'echo "Running seeders..."' >> /start.sh && \
+    echo 'php /var/www/html/artisan db:seed --force' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Optimiser l'\''application' >> /start.sh && \
+    echo 'echo "Optimizing application..."' >> /start.sh && \
+    echo 'php /var/www/html/artisan optimize' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Démarrer les services' >> /start.sh && \
+    echo 'echo "Starting PHP-FPM and Nginx..."' >> /start.sh && \
+    echo 'php-fpm -D' >> /start.sh && \
+    echo 'nginx -g "daemon off;"' >> /start.sh
 
-# Créer le script de démarrage avec des commandes simples
-RUN echo '#!/bin/sh' > /usr/local/bin/start.sh && \
-    echo 'if [ ! -f /var/www/html/database/database.sqlite ]; then' >> /usr/local/bin/start.sh && \
-    echo '    echo "Creating SQLite database..."' >> /usr/local/bin/start.sh && \
-    echo '    touch /var/www/html/database/database.sqlite' >> /usr/local/bin/start.sh && \
-    echo '    chown www-data:www-data /var/www/html/database/database.sqlite' >> /usr/local/bin/start.sh && \
-    echo 'fi' >> /usr/local/bin/start.sh && \
-    echo 'echo "Running migrations..."' >> /usr/local/bin/start.sh && \
-    echo 'php /var/www/html/artisan migrate --force' >> /usr/local/bin/start.sh && \
-    echo 'echo "Running seeders..."' >> /usr/local/bin/start.sh && \
-    echo 'php /var/www/html/artisan db:seed --force' >> /usr/local/bin/start.sh && \
-    echo 'echo "Generating application key..."' >> /usr/local/bin/start.sh && \
-    echo 'php /var/www/html/artisan key:generate --force' >> /usr/local/bin/start.sh && \
-    echo 'echo "Optimizing application..."' >> /usr/local/bin/start.sh && \
-    echo 'php /var/www/html/artisan optimize' >> /usr/local/bin/start.sh && \
-    echo 'echo "Starting PHP-FPM and Nginx..."' >> /usr/local/bin/start.sh && \
-    echo 'php-fpm -D' >> /usr/local/bin/start.sh && \
-    echo 'nginx -g "daemon off;"' >> /usr/local/bin/start.sh
+RUN chmod +x /start.sh
 
-RUN chmod +x /usr/local/bin/start.sh
-
-# Exposer le port
 EXPOSE 8000
 
-# Commande de démarrage
-CMD ["/usr/local/bin/start.sh"]
+CMD ["/start.sh"]
