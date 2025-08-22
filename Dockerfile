@@ -119,13 +119,6 @@ CMD sh -c "\
     php artisan cache:clear && \
     php artisan route:clear && \
     php artisan view:clear && \
-    \
-    # Générer la clé application si nécessaire\
-    echo 'Checking application key...' && \
-    if ! grep -q 'APP_KEY=base64:' /var/www/html/.env; then \
-        php artisan key:generate --force; \
-    fi && \
-    \
     # Migrations (ESSENTIEL)\
     echo 'Running migrations...' && \
     php artisan migrate --force && \
