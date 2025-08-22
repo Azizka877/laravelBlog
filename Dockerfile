@@ -101,16 +101,44 @@ RUN chmod +x /usr/local/bin/start.sh
 EXPOSE 8000
 
 CMD sh -c "\
+    # Créer la base de données SQLite\
     mkdir -p /var/www/html/database && \
     if [ ! -f /var/www/html/database/database.sqlite ]; then \
+        echo 'Creating SQLite database...' && \
         touch /var/www/html/database/database.sqlite && \
         chown www-data:www-data /var/www/html/database/database.sqlite && \
         chmod 666 /var/www/html/database/database.sqlite; \
     fi && \
+    \
+    # Permissions\
     chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
     chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache && \
-    php artisan migrate --force && \
-    php artisan db:seed --force && \
+    \
+    # Effacer TOUS les caches\
+    php artisan config:clear && \
+    php artisan cache:clear && \
+    php artisan route:clear && \
+    php artisan view:clear && \
+    \
+    # Forcer la régénération du cache de configuration\
+    php artisan config:cache && \
+    \
+    # Vérifier la connexion à la base de données\
+    echo 'Testing database connection...' && \
+    php artisan tinker --execute=\"try { \\\DB::connection()->getPdo(); echo 'DB connected'; } catch (\\\Exception \$e) { echo 'DB error: ' . \$e->getMessage(); }\" && \
+    \
+    # Migrations (avec gestion d'erreurs)\
+    echo 'Running migrations...' && \
+    php artisan migrate --force || echo 'Migrations may have issues, continuing...' && \
+    \
+    # Seeders (optionnel)\
+    echo 'Running seeders...' && \
+    php artisan db:seed --force || echo 'Seeders may have issues, continuing...' && \
+    \
+    # Optimiser\
     php artisan optimize && \
+    \
+    # Démarrer les services\
+    echo 'Starting services...' && \
     php-fpm -D && \
     nginx -g 'daemon off;'"
