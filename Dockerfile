@@ -34,14 +34,22 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction \
 # Étape 2 : Image finale
 FROM php:8.2-fpm-alpine
 
-# Installer les dépendances système
+# Installer les dépendances système avec les dépendances de build
 RUN apk update && apk add --no-cache \
     nginx \
+    libpng \
+    libzip \
+    oniguruma \
+    postgresql-libs \
+    sqlite \
+    sqlite-dev
+
+# Installer les dépendances de développement pour compiler les extensions PHP
+RUN apk add --no-cache --virtual .build-deps \
     libpng-dev \
     libzip-dev \
     oniguruma-dev \
     postgresql-dev \
-    sqlite \
     && docker-php-ext-install \
     pdo_mysql \
     pdo_pgsql \
@@ -49,7 +57,8 @@ RUN apk update && apk add --no-cache \
     bcmath \
     gd \
     zip \
-    mbstring
+    mbstring \
+    && apk del .build-deps
 
 # Créer les dossiers de configuration manquants
 RUN mkdir -p /etc/nginx/conf.d
@@ -67,17 +76,11 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 
 # Créer le script de démarrage
 RUN echo '#!/bin/sh\n\
-# Attendre que le service de base de données soit disponible (si nécessaire)\n\
-# echo "Waiting for database..."\n\
-# while ! nc -z $DB_HOST $DB_PORT; do\n\
-#   sleep 1\n\
-# done\n\
-# echo "Database is ready!"\n\
-\n\
-# Créer la base de données SQLite si elle n\'existe pas\n\
+# Créer la base de données SQLite si elle n'\''existe pas\n\
 if [ ! -f database/database.sqlite ]; then\n\
     echo "Creating SQLite database..."\n\
     touch database/database.sqlite\n\
+    chown www-data:www-data database/database.sqlite\n\
 fi\n\
 \n\
 # Exécuter les migrations et seeders\n\
