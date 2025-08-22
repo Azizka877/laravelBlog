@@ -41,9 +41,11 @@ RUN apk update && apk add --no-cache \
     libzip-dev \
     oniguruma-dev \
     postgresql-dev \
+    sqlite \
     && docker-php-ext-install \
     pdo_mysql \
     pdo_pgsql \
+    pdo_sqlite \
     bcmath \
     gd \
     zip \
@@ -63,15 +65,43 @@ COPY --from=builder /var/www/html /var/www/html
 # Configurer les permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-RUN if [ ! -f database/database.sqlite ]; then \
-    touch database/database.sqlite && \
-    php artisan migrate --force && \
-    php artisan db:seed --force && \
-    php artisan key:generate --force && \
-    php artisan optimize; \
-fi
+# Créer le script de démarrage
+RUN echo '#!/bin/sh\n\
+# Attendre que le service de base de données soit disponible (si nécessaire)\n\
+# echo "Waiting for database..."\n\
+# while ! nc -z $DB_HOST $DB_PORT; do\n\
+#   sleep 1\n\
+# done\n\
+# echo "Database is ready!"\n\
+\n\
+# Créer la base de données SQLite si elle n\'existe pas\n\
+if [ ! -f database/database.sqlite ]; then\n\
+    echo "Creating SQLite database..."\n\
+    touch database/database.sqlite\n\
+fi\n\
+\n\
+# Exécuter les migrations et seeders\n\
+echo "Running migrations..."\n\
+php artisan migrate --force\n\
+\n\
+echo "Running seeders..."\n\
+php artisan db:seed --force\n\
+\n\
+echo "Generating application key..."\n\
+php artisan key:generate --force\n\
+\n\
+echo "Optimizing application..."\n\
+php artisan optimize\n\
+\n\
+# Démarrer les services\n\
+echo "Starting PHP-FPM and Nginx..."\n\
+php-fpm -D\n\
+nginx -g "daemon off;"' > /usr/local/bin/start.sh
+
+RUN chmod +x /usr/local/bin/start.sh
+
 # Exposer le port
 EXPOSE 8000
 
-# Commande de démarrage simplifiée (sans supervisor)
-CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"]
+# Commande de démarrage
+CMD ["/usr/local/bin/start.sh"]
