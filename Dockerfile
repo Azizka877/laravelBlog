@@ -41,8 +41,7 @@ RUN apk update && apk add --no-cache \
     libzip \
     oniguruma \
     postgresql-libs \
-    sqlite \
-    sqlite-dev
+    sqlite
 
 # Installer les dépendances de développement pour compiler les extensions PHP
 RUN apk add --no-cache --virtual .build-deps \
@@ -50,6 +49,7 @@ RUN apk add --no-cache --virtual .build-deps \
     libzip-dev \
     oniguruma-dev \
     postgresql-dev \
+    sqlite-dev \
     && docker-php-ext-install \
     pdo_mysql \
     pdo_pgsql \
@@ -74,32 +74,27 @@ COPY --from=builder /var/www/html /var/www/html
 # Configurer les permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Créer le script de démarrage
-RUN echo '#!/bin/sh\n\
-# Créer la base de données SQLite si elle n'\''existe pas\n\
-if [ ! -f database/database.sqlite ]; then\n\
-    echo "Creating SQLite database..."\n\
-    touch database/database.sqlite\n\
-    chown www-data:www-data database/database.sqlite\n\
-fi\n\
-\n\
-# Exécuter les migrations et seeders\n\
-echo "Running migrations..."\n\
-php artisan migrate --force\n\
-\n\
-echo "Running seeders..."\n\
-php artisan db:seed --force\n\
-\n\
-echo "Generating application key..."\n\
-php artisan key:generate --force\n\
-\n\
-echo "Optimizing application..."\n\
-php artisan optimize\n\
-\n\
-# Démarrer les services\n\
-echo "Starting PHP-FPM and Nginx..."\n\
-php-fpm -D\n\
-nginx -g "daemon off;"' > /usr/local/bin/start.sh
+# Créer le répertoire database s'il n'existe pas
+RUN mkdir -p /var/www/html/database
+
+# Créer le script de démarrage avec des commandes simples
+RUN echo '#!/bin/sh' > /usr/local/bin/start.sh && \
+    echo 'if [ ! -f /var/www/html/database/database.sqlite ]; then' >> /usr/local/bin/start.sh && \
+    echo '    echo "Creating SQLite database..."' >> /usr/local/bin/start.sh && \
+    echo '    touch /var/www/html/database/database.sqlite' >> /usr/local/bin/start.sh && \
+    echo '    chown www-data:www-data /var/www/html/database/database.sqlite' >> /usr/local/bin/start.sh && \
+    echo 'fi' >> /usr/local/bin/start.sh && \
+    echo 'echo "Running migrations..."' >> /usr/local/bin/start.sh && \
+    echo 'php /var/www/html/artisan migrate --force' >> /usr/local/bin/start.sh && \
+    echo 'echo "Running seeders..."' >> /usr/local/bin/start.sh && \
+    echo 'php /var/www/html/artisan db:seed --force' >> /usr/local/bin/start.sh && \
+    echo 'echo "Generating application key..."' >> /usr/local/bin/start.sh && \
+    echo 'php /var/www/html/artisan key:generate --force' >> /usr/local/bin/start.sh && \
+    echo 'echo "Optimizing application..."' >> /usr/local/bin/start.sh && \
+    echo 'php /var/www/html/artisan optimize' >> /usr/local/bin/start.sh && \
+    echo 'echo "Starting PHP-FPM and Nginx..."' >> /usr/local/bin/start.sh && \
+    echo 'php-fpm -D' >> /usr/local/bin/start.sh && \
+    echo 'nginx -g "daemon off;"' >> /usr/local/bin/start.sh
 
 RUN chmod +x /usr/local/bin/start.sh
 
